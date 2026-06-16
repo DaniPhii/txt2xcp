@@ -10,10 +10,6 @@ The corresponding mapping is used in `classpad_encoder.py`.
 
 **Character set with no prefix**
 
-<div style="font-variant-emoji: text;
-            margin-left: auto;
-            margin-right: auto;
-            width: auto">
 |     |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
 |  **0x** |  <span style="display:inline-block; border:1px dashed;">␀</span>  |     |     |     |     |     |     |     |     |     |  <span style="display:inline-block; border:1px dashed;">␊</span>  |     |     |  <span style="display:inline-block; border:1px dashed;">␍</span>  |     |     |
@@ -32,13 +28,9 @@ The corresponding mapping is used in `classpad_encoder.py`.
 |  **Dx** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
 |  **Ex** |     |     |     |     |     |     |     |     |     |     |     |     |  <span style="display:inline-block; border:1px dashed;">$\vcenter{\small ᴇᴄ}$</span> |  <span style="display:inline-block; border:1px dashed;">$\vcenter{\small ᴇᴅ}$</span> |  <span style="display:inline-block; border:1px dashed;">$\vcenter{\small ᴇᴇ}$</span> |     |
 |  **Fx** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
-</div>
+
 **Character set with prefix 0xEC**
 
-<div style="font-variant-emoji: text;
-            margin-left: auto;
-            margin-right: auto;
-            width: auto">
 |     |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
 |  **0x** |     |  À  |  Á  |  Â  |  Ã  |  Ä  |  Å  |  Æ  |  Ç  |  È  |  É  |  Ê  |  Ë  |  Ì  |  Í  |  Î  |
@@ -57,14 +49,9 @@ The corresponding mapping is used in `classpad_encoder.py`.
 |  **Dx** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
 |  **Ex** |  $\vcenter{\tiny 𝟢}$  |  $\vcenter{\tiny 𝟣}$  |  $\vcenter{\tiny 𝟤}$  |  $\vcenter{\tiny 𝟥}$  |  $\vcenter{\tiny 𝟦}$  |  $\vcenter{\tiny 𝟧}$  |  $\vcenter{\tiny 𝟨}$  |  $\vcenter{\tiny 𝟩}$  |  $\vcenter{\tiny 𝟪}$  |  $\vcenter{\tiny 𝟫}$  |  $\vcenter{﹢}$  |  $\vcenter{﹣}$  |     |     |     |     |
 |  **Fx** |  ₀  |  ₁  |  ₂  |  ₃  |  ₄  |  ₅  |  ₆  |  ₇  |  ₈  |  ₉  |  ₊  |  ₋  |  ₋₁ |  ₘ  |  ₙ  |     |
-</div>
 
 **Character set with prefix 0xED**
 
-<div style="font-variant-emoji: text;
-            margin-left: auto;
-            margin-right: auto;
-            width: auto">
 |     |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
 |  **0x** |     |  à  |  á  |  â  |  ã  |  ä  |  å  |  æ  |  ç  |  è  |  é  |  ê  |  ë  |  ì  |  í  |  î  |
@@ -83,14 +70,9 @@ The corresponding mapping is used in `classpad_encoder.py`.
 |  **Dx** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
 |  **Ex** |  ς  |  ′  |  ″  |  ‴  |  ⁽  |  ⁾  |  ₓ  |  &#x209E;  |  ᵢ  |  ⱼ  |  ₖ  |     |     |     |     |     |
 |  **Fx** |  ⁰  |  ¹  |  ²  |  ³  |  ⁴  |  ⁵  |  ⁶  |  ⁷  |  ⁸  |  ⁹  |  ⁺  |  ⁻  |  ⁻¹ |  ˣ  |  ʸ  |     |
-</div>
 
 **Character set prefixed with 0xEE**
 
-<div style="font-variant-emoji: text;
-            margin-left: auto;
-            margin-right: auto;
-            width: auto">
 |     |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
 |  **0x** |     |  𝒾  |  ℯ  |  ᴇ  |  𝜋  |  ∞  |  °  |  ʳ  |  ᵀ  |  ʼ  |  ₙ  |  ∠  |  x̄ |  ȳ |  p̂  |  ⇒  |
@@ -99,17 +81,16 @@ The corresponding mapping is used in `classpad_encoder.py`.
 |  **3x** |  ⏎  |  ◢  |  ˗  |  ℕ  |  ℤ  |  ℚ  |  ℝ  |  ℂ  |  ¨  |  ˊ  |  ˋ  |  ˆ  |  ˜  |  ˚  |  ª  |  º  |
 |  **4x** |  ∓  |  ≈  |  ⇔  |  ∃  |  ∉  |  ⊄  |  ⊈  |  ∌  |  ⊅  |  ⊉  |     |  ⨲  |  ∾  |  ≅  |  ≢  |  ∝  |
 |  **5x** |  √  |  ∑  |  ∏  |  ∫  |  ∬  |  ∮  |  ∂  |  ¿  |  ¡  |  ¢  |  £  |  ¥  |  ₣  |  Ꞙ  |  €  |  ⨍  |
-|  **6x** |  Å  |  ℃  |  ℉  |  ←  |  ↑  |  →  |  ↓  |  ↔  |  ↕  |  ↖  |  ↗  |  ↘  |  ↙  |  ¼  |  ½  |  ¾  |
-|  **7x** |  §  |  ※  |  ¶  |  ¤  |  ∥  |  ¦  |  【  |  】  |  ⊿  |  ♪  |  ♫  |  🔒︎  |  🔓︎  |  □  |  ■  |  ☑  |
-|  **8x** |  ♠  |  ♣  |  ♥  |  ♦  |  ◇  |  ▲  |  ▶  |  ▼  |  ◀  |  ○  |  ◎  |  ◉  |  ●  |  ©  |  ®  |  …  |
+|  **6x** |  Å  |  ℃  |  ℉  |  ←︎  |  ↑︎  |  →︎  |  ↓︎  |  ↔︎  |  ↕︎  |  ↖︎  |  ↗︎  |  ↘︎  |  ↙︎  |  ¼  |  ½  |  ¾  |
+|  **7x** |  §  |  ※  |  ¶  |  ¤  |  ∥  |  ¦  |  【  |  】  |  ⊿  |  ♪  |  ♫  |  🔒︎  |  🔓︎  |  □  |  ■  |  ☑︎  |
+|  **8x** |  ♠  |  ♣  |  ♥  |  ♦  |  ◇  |  ▲︎  |  ▶︎  |  ▼︎  |  ◀︎  |  ○  |  ◎  |  ◉  |  ●  |  ©  |  ®  |  …  |
 |  **9x** |  ⋯  |  ∘  |  ∙  |  ∗  |  ⮣  |  ⮧  |  ⮡  |  ⮥  |  ☒  |  🔔︎  |     |  🞄  |  ⇧  |  ⭡  |  ⮌  |  ⏨  |
 |  **Ax** |  ⛭  |  ⭠  |  ⊕  |  ⊖  |  ⊗  |  ⊘  |  ∦  |  ⫽  |  z̄ |  Ā  |  B̄ |  P̄ |  Q̄ |  ⸬  |  ﹐  |  𝒿  |
 |  **Bx** |  ⚙︎  |     |     |  ᴀ  |  ʙ  |  ᴊ  |  ᴋ  |  ɴ  |  ᴘ  |  𝖾  |  𝗉  |  𝗎  |  𝝁  |  𝝉  |  ∞  |  🮠  |
-|  **Cx** |  <span style="display:none">📟︎</span>  | <span style="display:none">$\tiny{\sqrt{μ₀/ε₀}}$</span>  |     |     |     |     |     |     |     |     |     |     |     |     |     |     
+|  **Cx** |  <span style="display:none">📟︎</span>  | <span style="display:none">$\tiny{\sqrt{μ₀/ε₀}}$</span>  |     |     |     |     |     |     |     |     |     |     |     |     |     |
 |  **Dx** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
 |  **Ex** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
 |  **Fx** |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
-</div>
 
 ## Previous notes from SnailMath shared on 2020/11/22:
 
@@ -157,3 +138,4 @@ The corresponding mapping is used in `classpad_encoder.py`.
 > ```
 > 
 > I tried different ways for calculatng the checksum (from including certin  values and not including certain values, until I got it working. First this worked only for files less than 9 byte long, but I found the bug. This will work with files up to 32000 bytes and even more. (I tested it with chapters of random ebooks I had lying around.)
+
