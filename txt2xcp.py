@@ -1,458 +1,455 @@
-// This program converts any file (preferably a text file
-// into an xcp file used by calculators like the fx-cp 400 aka Classpad II.
-//
-//
-// This is a program written by Pascal aka SnailMath. 
-//   My GitHub: https://github.com/SnailMath/txt2xcp
-//   My Discord: https://discord.gg/XWd4yNEhsR
-//   My YouTube Channel: https://www.youtube.com/channel/UC4MX6_QKFwnA2sG9eGwqcjA
-//   My Email: snailmathprog@gmail.com
-//
-//
-// I'm not afiliated with any company.
-//
-//
+#!/usr/bin/env python3
 
-#include <stdio.h>
-#include <stdint.h>
+# This program converts text into XCP files used by
+# calculators like the Casio fx-CP400 (ClassPad II).
+# 
+# 
+# This is a program originally written in C by Pascal aka SnailMath.
+#   Original GitHub repo: https://github.com/SnailMath/txt2xcp
+# 
+# 
+# SnailMath is not afiliated with any company. Neither is DaniPhii.
+# 
+# 
+# This version is a direct translation from C to Python made assisted by 
+# Google Gemini 3.5 Flash and includes an unpacking option to extract 
+# the text data from XCP files that wasn't included in the original C
+# version of this program. Also, this version considers specific character 
+# encoding headers used by the calculator to avoid breaking the encoding
+# and corrupting the original text written locally on the device. This 
+# is very useful when the Python script classpad_encoder.py is used to 
+# transcode the text before and after conversions from/to TXT/XCP files.
+# 
+# 
 
-#define tohex(x) ((x)<= 9 ?(x)+'0':(x)-10+'a') //convert from a number (0-15) to the ascii hex representation.
-#define tobin(x) ((x)<='9'?(x)-'0':(x)+10-'a') //convert from a ascii hex nibble to the binary number.
-#define info(...) if(verbose)printf(__VA_ARGS__); //print this, only if verbose.
-#define BIG_ENDIAN 1
-#define LITTLE_ENDIAN 0
+import sys
+import os
+import io
 
-char verbose = 0;		//verbose output
-char chgnew = 0;   		//change newline character
-char padchar = 0;   		//character used for padding
+# Global state variables
+verbose = 0
+chgnew = 0
+padchar = 0
+unpack = 0
+checksum = 0x00
 
-unsigned char checksum = 0x00;	//The checksum. (8 bit)
+# Constants
+BIG_ENDIAN = 1
+LITTLE_ENDIAN = 0
+len2_length = 4
+block_zero_length = 9
+eof_length = 2
 
-uint32_t addr_len1;		//This will hold the address where we'll add len1 later.
-uint32_t addr_len1asc;		//This will hold the address where we'll add len1asc later.
-uint32_t addr_len2;		//This will hold the address where we'll add len2 later.
+varname = "file"
+folname = "main"
+varname_len = 5
+folname_len = 5
 
-uint32_t len1;			//This is len1 (sum of the following _length)
-#define	 len2_length 	   4	//The length of the field len2
-#define	 block_zero_length 9	//The length of the field block_zero
-uint32_t data_length 	 = 0;	//The length of the data
-#define	 eof_length 	   2	//The length of the eof structure of an xcp file
-int	 padding_length;	//The length of the padding
-		
-char* varname = "file";		//The name of the var
-char* folname = "main";		//The name of the folder
-uint8_t varname_len = 5;	//The length of the name of the var (including the 0x00)
-uint8_t folname_len = 5;	//The length of the name of the folder (including the 0x00)
+infile = None
+outfile = None
 
-char* infile = 0;		//The name of the input file
-char* outfile= 0;		//The name of the output file
-char outputfilename[64]; 	//Buffer for output file name
+def tobin(ch):
+    """Convert an ASCII hex nibble character to a binary integer."""
+    if '0' <= ch <= '9':
+        return ord(ch) - ord('0')
+    else:
+        return ord(ch.lower()) - ord('a') + 10
 
-//Writes to the output file that keep track of the checksum
-void xcpwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream, unsigned char* checksum);
-void xcpwriteHexByte(uint8_t  number, FILE *stream, unsigned char* checksum);
-void xcpwriteHexLong(uint32_t number, FILE *stream, unsigned char* checksum);
-void xcpputc(int ch, FILE *stream, unsigned char* checksum);
-void xcpwriteBinLong(uint32_t number, char endian, FILE *stream, unsigned char* checksum);
+def info_log(*args, **kwargs):
+    """Print message only if verbose output is enabled."""
+    if verbose:
+        print(*args, **kwargs, end='')
 
-/*
+def update_checksum(val):
+    global checksum
+    checksum = (checksum - val) & 0xFF
 
-The files on the calculator are called variables (var for short) and they are placed into folders.
+def xcpwrite(ptr: bytes, stream):
+    """Writes bytes to the stream and updates the 8-bit checksum."""
+    stream.write(ptr)
+    for b in ptr:
+        update_checksum(b)
 
-// XCP file structure:
- 1 vcp		 10 byte - the text "VCP.XDATA" including the 0x00 terminator
- 2 longnumber	  8 byte - (hex ascii) the number 0x5f4d4353
- 3 folname_len	  2 byte - (hex ascii) length of the folder name + 1
- 4 folname	2-9 byte - name of the folder including 0x00 terminator
- 5 varname_len	  2 byte - (hex ascii) length of the name + 1
- 6 varname	2-9 byte - name of the var including 0x00 terminator) (also called "filename")
- 7 block_31	  8 byte - the text "00000031"
- 8 folname2	 16 byte - name of the folder, padded with 0xff
- 9 varname2	 16 byte - name of the var, padded with 0xff
-10 len1		  4 byte - (binary big endian) The length of len2, block_zero, data, eof and padding combined, this has to be divisible by 4, see padding
-11 block_guq	 13 byte - the text "GUQ" followed by ten bytes of 0xff
-12 len1asc	  8 byte - (hex ascii) the value of len1 again, but in ascii hex, small letters
-13 len2		  4 byte - (binary little endian) the length of the data + 3
-14 block_zero	  9 byte - nine times 0x00
-15 data		len byte - the binary data
-16 eof		  2 byte - The file terminator 0x00 0xff
-17 padding	0-3 byte - pad the data so len1 is a multiple of 4 [pad with (3-((len+2)&~0x03)) bytes] 
-18 checksum	  2 byte - (hex ascii) the checksum (take 0x00 and subtract all byes, except hex-ascii values, these are subtracted as hexadecimal numbers.
-*/
+def xcpwriteHexByte(number: int, stream):
+    """Writes a byte as two hexadecimal ASCII characters and updates the checksum."""
+    hex_str = f"{(number & 0xFF):02x}"
+    stream.write(hex_str.encode('ascii'))
+    update_checksum(number & 0xFF)
 
-int main(int argc, char* argv[]){
+def xcpwriteHexLong(number: int, stream):
+    """Writes a 32-bit integer as 8 hexadecimal ASCII characters."""
+    xcpwriteHexByte((number >> 24) & 0xFF, stream)
+    xcpwriteHexByte((number >> 16) & 0xFF, stream)
+    xcpwriteHexByte((number >> 8) & 0xFF, stream)
+    xcpwriteHexByte(number & 0xFF, stream)
 
-	if ( argc < 2){ // If we didn't get any args, show this message.
-		fprintf( stderr, "\n\
-This is the program txt2xcp by SnailMath.\n\
-My YouTube Channel: https://www.youtube.com/channel/UC4MX6_QKFwnA2sG9eGwqcjA\n\
-My GitHub:  https://github.com/SnailMath\n\
-My Discord: https://discord.gg/XWd4yNEhsR\n\
-My Email:   snailmathprog@gmail.com\n\
-\n\
-Usage: %s [OPTIONS] SOURCE [DEST]\n\
-\n\
-Converts the file SOURCE to an .xcp file called DEST.\n\
-\n\
-Options:\n\
-  -l       Convert newline Characters from \"\\r\\n\" (Windows) or \"\\n\"\n\
-           (Linux) to \"\\r\" (The newline characters used by the calc). Use\n\
-           this only for text, and don't use it for programs or binary data.\n\
-  -n NAME  Specify the name of the variable\n\
-  -d NAME  Specify the name of the folder\n\
-  -o NAME  Specify the output filename, if not provided at the end\n\
-  -v       Verbose the output\n\
-  -p       Don't use it! Specify character used for padding (default \\x00)\n\
-\n\
-Examples:\n\
-%s yourfile.bin newfile.xcp\n\
-%s -l yourfile2.txt newfile2.xcp\n\
-%s -l -o out.xcp -n hello -f main yourfile3.txt\n\
-\n\
-The xcp file is of the type program(text).\n\
-\n\
-Tip: You can drag and drop a file into this program.\n", argv[0], argv[0], argv[0], argv[0]);	
-		return 0;
-	}
+def xcpputc(ch: int, stream):
+    """Writes a single byte to the stream and updates the checksum."""
+    stream.write(bytes([ch & 0xFF]))
+    update_checksum(ch & 0xFF)
 
-	int i = 1 ; //iterate over every argument
-	while (i<argc){
-		// -l
-		if (argv[i][0] == '-' && argv[i][1] == 'l' && argv[i][2] == 0) {
-			chgnew = 1;
-		}
-		// -v
-		else if (argv[i][0] == '-' && argv[i][1] == 'v' && argv[i][2] == 0) {
-			verbose = 1;
-		}
-		// -p
-		else if (argv[i][0] == '-' && argv[i][1] == 'p' && argv[i][2] == 0) {
-			i++; //go to the next arg
-			if (i==argc){ fprintf(stderr,"ERROR: You are stupid. If you say -p then you have to tell me a characer to use!\n");return -1;}
-			padchar = (tobin(argv[i][0]) << 4) +  tobin(argv[i][1]);
-		}
-		// -n
-		else if (argv[i][0] == '-' && argv[i][1] == 'n' && argv[i][2] == 0) {
-			i++; //go to the next arg
-			if (i==argc){
-				fprintf(stderr,"ERROR: Parameter \"-n\" is specified but no name is given.\n");
-				return -1;
-			}
-			varname = argv[i]; //first increment, then use i
-			//count the number of characters of the varname including the 0x00
-			varname_len = 1;
-			for(int i=0;varname[i]!=0;i++)varname_len++;
-			if(varname_len>9) varname_len=9, varname[8]=0; //trunkate the name to 8 characters
-		}
-		// -d
-		else if (argv[i][0] == '-' && argv[i][1] == 'd' && argv[i][2] == 0) {
-			i++;
-			if (i==argc){
-				fprintf(stderr,"ERROR: Parameter \"-d\" is specified but no name is given.\n");
-				return -1;
-			}
-			folname = argv[i];
-			//count the number of characters of the folname including the 0x00
-			folname_len = 1;
-			for(int i=0;folname[i]!=0;i++)folname_len++;
-			if(folname_len>9) folname_len=9, folname[8]=0; //trunkate the name to 8 characters
-		}
-		// -o
-		else if (argv[i][0] == '-' && argv[i][1] == 'o' && argv[i][2] == 0) {
-			i++;
-			if (i==argc){
-				fprintf(stderr,"ERROR: Parameter \"-o\" is specified but no name is given.\n");
-				return -1;
-			}
-			if (outfile!=0) { //If we already have an outfile
-				fprintf(stderr,"ERROR: There are too many output filenames given. Please use just one ouput file!\n");
-				return -1;
-			}
-			outfile = argv[i];
-		}
-		// unrecognized parameter
-		else if (argv[i][0] == '-') {
-			fprintf(stderr,"ERROR: Parameter \"%s\" is not a recognized argument.\n", argv[i]);
-			return -1;
-		}
-		//filename
-		else {
-			//if this occures, we are not reading an argument, but a file name.
-			if(infile==0){ // If we haven't got an infile jet, this is it.
-				infile = argv[i];
-			}else if (outfile==0) { //If we already have an infile name, this must be the outfile name
-				outfile = argv[i];
-			}else{ //if we already have the file names, give an error...
-				fprintf(stderr,"ERROR: There are too many filenames given. Please use just one input and one ouput file!\n");
-				return -1;
-			}
-		}
+def xcpwriteBinLong(number: int, endianness: int, stream):
+    """Writes a 32-bit binary integer in the specified endianness format."""
+    if endianness == BIG_ENDIAN:
+        xcpputc((number >> 24) & 0xFF, stream)
+        xcpputc((number >> 16) & 0xFF, stream)
+        xcpputc((number >> 8) & 0xFF, stream)
+        xcpputc(number & 0xFF, stream)
+    else:  # LITTLE_ENDIAN
+        xcpputc(number & 0xFF, stream)
+        xcpputc((number >> 8) & 0xFF, stream)
+        xcpputc((number >> 16) & 0xFF, stream)
+        xcpputc((number >> 24) & 0xFF, stream)
 
-		i++; //Go to the next argument
-	}
+def print_usage():
+    prog_name = sys.argv[0]
+    sys.stderr.write(f"\n"
+                     f"Usage: {prog_name} [OPTIONS] SOURCE [DEST]\n\n"
+                     f"Converts the file SOURCE to an .xcp file called DEST.\n\n"
+                     f"Options:\n"
+                     f"  -l       Convert newline Characters from \"\\r\\n\" (Windows) or \"\\n\"\n"
+                     f"           (Linux) to \"\\r\" (The newline characters used by the calc). Use\n"
+                     f"           this only for text, and don't use it for programs or binary data.\n"
+                     f"  -n NAME  Specify the name of the variable\n"
+                     f"  -d NAME  Specify the name of the folder\n"
+                     f"  -o NAME  Specify the output filename, if not provided at the end\n"
+                     f"  -v       Verbose the output\n"
+                     f"  -p       Don't use it! Specify character used for padding (default \\x00)\n"
+                     f"  -u       Unpack text/binary data from an XCP file\n\n"
+                     f"Examples:\n"
+                     f"{prog_name} yourfile1.bin newfile1.xcp\n"
+                     f"{prog_name} -l yourfile2.txt newfile2.xcp\n"
+                     f"{prog_name} -l -o newfile3.xcp -n newfile3 -d main yourfile3.txt\n"
+                     f"{prog_name} -u -o newfile4.txt yourfile4.xcp\n\n"
+                     f"The xcp file is of the type Casio Program(Text).\n")
 
-	//check if input and output files are given:
-	if(infile==0){
-		fprintf(stderr,"ERROR: There is no input file given!\n");
-		return -1;
-	}
-	if(outfile==0){ //when no outfile name was specified, use the infile with a new extension.
-		int i=0;
-		while(i<64-4-1){ //we need space for the .xcp and for the 0x00 at the end of the filename.
-			char c = infile[i];
-			if(c==0) break;
-			outputfilename[i]=c;
-			i++;
-		}
-		outputfilename[i++]='.'; //Add the file extension
-		outputfilename[i++]='x';
-		outputfilename[i++]='c';
-		outputfilename[i++]='p';
-		outputfilename[i  ]= 0 ;
+# The files on the calculator are called variables (var for short) and they are placed into folders.
+# 
+# XCP file structure:
+#     1 vcp           10 byte - the text "VCP.XDATA" including the 0x00 terminator
+#     2 longnumber     8 byte - (hex ascii) the number 0x5f4d4353
+#     3 folname_len    2 byte - (hex ascii) length of the folder name + 1
+#     4 folname      2-9 byte - name of the folder including 0x00 terminator
+#     5 varname_len    2 byte - (hex ascii) length of the name + 1
+#     6 varname      2-9 byte - name of the var including 0x00 terminator) (also called "filename")
+#     7 block_31       8 byte - the text "00000031"
+#     8 folname2      16 byte - name of the folder, padded with 0xff
+#     9 varname2      16 byte - name of the var, padded with 0xff
+#    10 len1           4 byte - (binary big endian) The length of len2, block_zero, data, eof 
+#                               and padding combined, this has to be divisible by 4, see padding
+#    11 block_guq     13 byte - the text "GUQ" followed by ten bytes of 0xff
+#    12 len1asc        8 byte - (hex ascii) the value of len1 again, but in ascii hex, small letters
+#    13 len2           4 byte - (binary little endian) the length of the data + 3
+#    14 block_zero     9 byte - nine times 0x00
+#    15 data         len byte - the binary data
+#    16 eof            2 byte - The file terminator 0x00 0xff
+#    17 padding      0-3 byte - pad the data so len1 is a multiple of 4 [pad with (3-((len+2)&~0x03)) bytes] 
+#    18 checksum       2 byte - (hex ascii) the checksum (take 0x00 and subtract all byes, except 
+#                               hex-ascii values, these are subtracted as hexadecimal numbers.
 
-		outfile = outputfilename;
-	}
-	
-	//The file stuff
-	FILE *in;
-	FILE *out;
+def main():
+    global verbose, chgnew, padchar, unpack, varname, folname, varname_len, folname_len, infile, outfile, checksum
 
-	//open input file //DONT FORGET THE "b" FOR BINARY MODE! I HATE \r\n!!!
-	in = fopen(infile,"rb");
-	if (in == NULL){
-		fprintf(stderr, "ERROR: Cannot open file \"%s\" for reading!\n",infile);
-		return -1;
-	}
-	//open out file
-	out = fopen(outfile,"wb");
-	if (in == NULL){
-		fprintf(stderr, "ERROR: Cannot open file \"%s\" for writing!\n",outfile);
-		fclose(in); //close the infile before crashing...
-		return -1;
-	}
-	//Now both files are open.
+    argc = len(sys.argv)
+    if argc < 2:
+        print_usage()
+        sys.exit(0)
 
+    i = 1
+    while i < argc:
+        arg = sys.argv[i]
+        if arg == '-l':
+            chgnew = 1
+        elif arg == '-v':
+            verbose = 1
+        elif arg == '-u':
+            unpack = 1
+        elif arg == '-p':
+            i += 1
+            if i == argc:
+                sys.stderr.write("🗶 Parameter \"-p\" is specified but no character is given.\n")
+                sys.exit(-1)
+            p_arg = sys.argv[i]
+            padchar = (tobin(p_arg[0]) << 4) + tobin(p_arg[1])
+        elif arg == '-n':
+            i += 1
+            if i == argc:
+                sys.stderr.write("🗶 Parameter \"-n\" is specified but no name is given.\n")
+                sys.exit(-1)
+            varname = sys.argv[i]
+            if len(varname) > 8:
+                varname = varname[:8]
+            varname_len = len(varname) + 1
+        elif arg == '-d':
+            i += 1
+            if i == argc:
+                sys.stderr.write("🗶 Parameter \"-d\" is specified but no name is given.\n")
+                sys.exit(-1)
+            folname = sys.argv[i]
+            if len(folname) > 8:
+                folname = folname[:8]
+            folname_len = len(folname) + 1
+        elif arg == '-o':
+            i += 1
+            if i == argc:
+                sys.stderr.write("🗶 Parameter \"-o\" is specified but no name is given.\n")
+                sys.exit(-1)
+            if outfile is not None:
+                sys.stderr.write("🗶 There are too many output filenames given. Please use just one output file.\n")
+                sys.exit(-1)
+            outfile = sys.argv[i]
+        elif arg.startswith('-'):
+            sys.stderr.write(f"🗶 Parameter \"{arg}\" is not a recognized argument.\n")
+            sys.exit(-1)
+        else:
+            if infile is None:
+                infile = arg
+            elif outfile is None:
+                outfile = arg
+            else:
+                sys.stderr.write("🗶 There are too many filenames given. Please use just one input and one output file!\n")
+                sys.exit(-1)
+        i += 1
 
-	// Now convert the file!
+    if infile is None:
+        sys.stderr.write("🗶 There is no input file given!\n")
+        sys.exit(-1)
 
-	info(  "Step 1: vcp\n"  );
-	{
-		char buf[] = "VCP.XDATA"; //This is terminated by 0x00.
-		//write to the outfile (and keep track of our checksum...)
-		xcpwrite (buf, 1, sizeof(buf), out, &checksum);
-	}
-	
-	info(  "Step 2: longnumber\n"  );
-	{
-		//write to the outfile (and keep track of our checksum...)
-		xcpwriteHexLong(0x5f4d4353, out, &checksum);
-	}
+    if outfile is None:
+        base_filename = infile[:59]
+        if unpack:
+            if base_filename.lower().endswith('.xcp'):
+                base_filename = base_filename[:-4]
+            outfile = base_filename + ".txt"
+        else:
+            outfile = base_filename + ".xcp"
 
-	info(  "Step 3: folname_len\n"  );
-	{
-		xcpwriteHexByte(folname_len, out, &checksum);
-	}
-	
-	info(  "Step 4: folname\n"  );
-	{
-		xcpwrite (folname, 1, folname_len, out, &checksum);
-	}
-	
-	info(  "Step 5: varname_len\n"  );
-	{
-		xcpwriteHexByte(varname_len, out, &checksum);
-	}
-	
-	info(  "Step 6: varname\n"  );
-	{
-		xcpwrite (varname, 1, varname_len, out, &checksum);
-	}
+    # Open Input File
+    try:
+        in_file = open(infile, "rb")
+    except Exception:
+        sys.stderr.write(f"🗶 Cannot open file \"{infile}\" for reading!\n")
+        sys.exit(-1)
 
-	info(  "Step 7: block_31\n"  );
-	{
-		xcpwriteHexLong(0x00000031, out, &checksum);
-	}
+    if unpack:
+        # --- UNPACK MODE ---
+        with in_file:
+            info_log("🛈 Step 1: Validating VCP header\n")
+            vcp_buf = in_file.read(10)
+            if len(vcp_buf) != 10:
+                sys.stderr.write("🗶 Premature end of file reading VCP header.\n")
+                sys.exit(-1)
 
-	info(  "Step 8: folname2\n"  );
-	{
-		char buf[16];
-		for(int i=0; i<16 ; i++) //copy the folname into buf and pad with 0xff
-			buf[i] = (i<(folname_len-1))?folname[i]:0xff;
-		xcpwrite (buf, 1, sizeof(buf), out, &checksum);
-	}
-	
-	info(  "Step 9: varname2\n"  );
-	{
-		char buf[16];
-		for(int i=0; i<16 ; i++) //copy the varname into buf and pad with 0xff
-			buf[i] = (i<(varname_len-1))?varname[i]:0xff;
-		xcpwrite (buf, 1, sizeof(buf), out, &checksum);
-	}
+            info_log("🛈 Step 2-6: Skipping to folder and variable configurations\n")
+            in_file.seek(8, os.SEEK_CUR)
 
-	info(  "Step 10: skip len1 (for now)\n"  );
-	{
-		addr_len1 = ftell(out); //save this address, we'll come back to that later.
-		//just write 0's, we'll add this later.
-		char buf[4] = {0,0,0,0};
-		fwrite (buf, 1, sizeof(buf), out );
-	}
+            # Step 3 & 4: Read and skip folder name dynamic chunk
+            hex_len = in_file.read(2)
+            if len(hex_len) != 2:
+                sys.stderr.write("🗶 Premature end of file reading folder length.\n")
+                sys.exit(-1)
+            f_len = (tobin(chr(hex_len[0])) << 4) + tobin(chr(hex_len[1]))
+            in_file.seek(f_len, os.SEEK_CUR)
 
-	info(  "Step 11: block_guq\n"  );
-	{
-		char buf[13] = {'G','U','Q',0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
-		xcpwrite (buf, 1, sizeof(buf), out, &checksum);
-	}
+            # Step 5 & 6: Read and skip variable name dynamic chunk
+            hex_len = in_file.read(2)
+            if len(hex_len) != 2:
+                sys.stderr.write("🗶 Premature end of file reading variable length.\n")
+                sys.exit(-1)
+            v_len = (tobin(chr(hex_len[0])) << 4) + tobin(chr(hex_len[1]))
+            in_file.seek(v_len, os.SEEK_CUR)
 
-	info(  "Step 12: skip len1asc (for now)\n"  );
-	{
-		addr_len1asc = ftell(out); //save this address, we'll come back to that later.
-		//just write 0's, we'll add this later.
-		char buf[8] = {0,0,0,0,0,0,0,0};
-		fwrite (buf, 1, sizeof(buf), out );
-	}
+            info_log("🛈 Step 7-12: Skipping structured internal byte configurations\n")
+            in_file.seek(65, os.SEEK_CUR)
 
-	info(  "Step 13: skip len2 (for now)\n"  );
-	{
-		addr_len2 = ftell(out); //save this address, we'll come back to that later.
-		//just write 0's, we'll add this later.
-		char buf[len2_length] = {0,0,0,0};
-		fwrite (buf, 1, sizeof(buf), out );
-	}
+            info_log("🛈 Step 13: Processing block data sizes (len2)\n")
+            len2_buf = in_file.read(4)
+            if len(len2_buf) != 4:
+                sys.stderr.write("🗶 Premature end of file reading len2 block structure.\n")
+                sys.exit(-1)
 
-	info(  "Step 14: block_zero\n"  );
-	{
-		char buf[block_zero_length] = {0,0,0,0,0,0,0,0,0};
-		xcpwrite (buf, 1, sizeof(buf), out, &checksum);
-	}
+            len2_val = len2_buf[0] | (len2_buf[1] << 8) | (len2_buf[2] << 16) | (len2_buf[3] << 24)
+            if len2_val < 3:
+                sys.stderr.write("🗶 Structural data format integrity error.\n")
+                sys.exit(-1)
+            d_len = len2_val - 3
 
-	info(  "Step 15: copy the data\n"  );
-	{
-		while (1){
-			int ch = fgetc(in);
-			if (chgnew){	
-				if (ch == '\r'){ //When windows-newline (\r\n), add \r to the file but ignore the following \n
-					xcpputc('\r', out, &checksum); data_length++; //add \r to the xcp file
-					ch = fgetc(in);
-					if (ch == '\n')	continue; //If it is \n, go to the next char, else add this char further down to the xcp file
-				}
-				if (ch == '\n'){ //When linux newline (\n), add \r to the file.
-					ch = '\r'; //further down, this will be added to the xcp file
-				}
-			}
-			if (ch == EOF )break;
-			//Add the char to the xcp file
-			xcpputc(ch, out, &checksum); data_length++;
-		}
-		info("Length of the content: %ld length of input file: %ld\n",(long int)data_length,(long int)ftell(in));
-	}
+            info_log("🛈 Step 14: Passing block_zero structure configuration\n")
+            in_file.seek(9, os.SEEK_CUR)
 
-	info(  "Step 16: eof\n"  );
-	{
-		char buf[eof_length] = {0x00,0xff}; //The data terminater is 00ff
-		xcpwrite (buf, 1, sizeof(buf), out, &checksum);
-	}
-	
-	info(  "Step 17: padding "  );
-	{
-		//The length of len2, block_zero, data, eof and this padding combined has to be a multiple of 4.
-		//because `4+9+len+2+padding = 0 mod 4` has to be true we can deduce that `4+9+len+2 = - padding mod 4` is also true.
-		//This means that `-(4+9+len+2) = padding mod 4`. Mod 4 means the rest dividing by 4 aka the last 2 digits.
-		padding_length = (0-(len2_length+block_zero_length+data_length+eof_length)) & 0x03;
-		char buf[] = {padchar,padchar,padchar};
-		xcpwrite (buf, 1, padding_length, out, &checksum);	
-	
-		info("(padding with %d bytes)\n", padding_length);
-	}
+            info_log("🛈 Step 15: Stream extracting contents data payloads\n")
+            out_bytes = bytearray()
+            k = 0
+            while k < d_len:
+                ch_b = in_file.read(1)
+                if not ch_b:
+                    sys.stderr.write("🗶 Sudden loss of data segments while processing stream.\n")
+                    break
+                ch = ch_b[0]
+                if chgnew:
+                    if ch in (0xEC, 0xED, 0xEE):
+                        out_bytes.append(ch)
+                        k += 1
+                        if k >= d_len:
+                            break
+                        next_ch_b = in_file.read(1)
+                        if not next_ch_b:
+                            sys.stderr.write("🗶 Sudden loss of data segments...\n")
+                            break
+                        out_bytes.append(next_ch_b[0])
+                        k += 1
+                        continue
+                    if ch == ord('\r'):
+                        out_bytes.append(ord('\n'))
+                        k += 1
+                        continue
+                out_bytes.append(ch)
+                k += 1
 
-	//now to the len1 and len2 we left out...	
-	info(  "now Step 10: len1 "  );
-	{
-		fseek(out,addr_len1,SEEK_SET); //return to the address we saved
-		//len1 is the length of len2, block_zero, data, eof and padding combined, this is divisible by 4 (see padding)
-		len1 = len2_length + block_zero_length + data_length + eof_length + padding_length;
-		xcpwriteBinLong(len1, BIG_ENDIAN, out, &checksum);
-	
-		info("len1 is %d\n",len1);
-		
-	}
+            try:
+                with open(outfile, "wb") as f_out:
+                    f_out.write(out_bytes)
+            except Exception:
+                sys.stderr.write(f"🗶 Cannot open file \"{outfile}\" for writing!\n")
+                sys.exit(-1)
 
-	info(  "now Step 12: len1asc\n"  );
-	{
-		fseek(out,addr_len1asc,SEEK_SET); //return to the address we saved
-		xcpwriteHexLong(len1, out, &checksum);
-	}
-	
-	info(  "now Step 13: len2\n"  );
-	{
-		fseek(out,addr_len2,SEEK_SET); //return to the address we saved
-		uint32_t len2 = data_length + 3;
-		xcpwriteBinLong(len2, LITTLE_ENDIAN, out, &checksum);
-	}
-	
-	info(  "Step 18: checksum\n"  );
-	{
-		fseek(out,0,SEEK_END); //return to the end
-		//write the checksum we've calculated
-		xcpwriteHexByte(checksum, out, &checksum);
-	}
+            print("✔ File unpacked successfully.")
+    else:
+        # --- PACK / CONVERT MODE ---
+        out_stream = io.BytesIO()
 
-	info(  "Closeing the files..\n"  );
-	{
-		fclose(out);
-		fclose(in);
-	}
+        info_log("🛈 Step 1: vcp\n")
+        xcpwrite(b"VCP.XDATA\x00", out_stream)
 
-	printf("File converted successfully.\n");
-}
+        info_log("🛈 Step 2: longnumber\n")
+        xcpwriteHexLong(0x5f4d4353, out_stream)
 
+        info_log("🛈 Step 3: folname_len\n")
+        xcpwriteHexByte(folname_len, out_stream)
 
-//writes the data to the file and keeps track of the checksum.
-void xcpwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream, unsigned char* checksum){
-	//output to the file
-	fwrite (ptr, size, nmemb, stream );
-	//calculate the new checksum
-	for(unsigned long i = 0; i < size*nmemb ; i++){
-		*checksum -= *((unsigned char*)ptr+i);
-	}
-}
+        info_log("🛈 Step 4: folname\n")
+        folname_bytes = folname.encode('ascii') + b'\x00'
+        xcpwrite(folname_bytes, out_stream)
 
-//writes a 32 bit hexadecimal number to the file and keeps track of the checksum.
-void xcpwriteHexLong(uint32_t number, FILE *stream, unsigned char* checksum){
-	xcpwriteHexByte((uint8_t)(number>>(3*8)), stream, checksum);
-	xcpwriteHexByte((uint8_t)(number>>(2*8)), stream, checksum);
-	xcpwriteHexByte((uint8_t)(number>>(1*8)), stream, checksum);
-	xcpwriteHexByte((uint8_t)(number>>(0*8)), stream, checksum);
-}
+        info_log("🛈 Step 5: varname_len\n")
+        xcpwriteHexByte(varname_len, out_stream)
 
-//writes a 8 bit hexadecimal number to the file and keeps track of the checksum.
-void xcpwriteHexByte(uint8_t number, FILE *stream, unsigned char* checksum){
-	//output to the file
-	fputc(tohex((number>>4)&0x0f), stream);
-	fputc(tohex((number   )&0x0f), stream);
-	//calculate the new checksum
-	*checksum -= number;
-}
+        info_log("🛈 Step 6: varname\n")
+        varname_bytes = varname.encode('ascii') + b'\x00'
+        xcpwrite(varname_bytes, out_stream)
 
-//writes a single character to the file and keeps track of the checksum.
-void xcpputc(int ch, FILE *stream, unsigned char* checksum){ //this returns void, not int
-	//output to the file
-	fputc(ch, stream)	;
-	//calculate the new checksum
-	*checksum -= ch;
-}
+        info_log("🛈 Step 7: block_31\n")
+        xcpwriteHexLong(0x00000031, out_stream)
 
-//writes a 32 bit binary number to the file and keeps track of the checksum.
-void xcpwriteBinLong(uint32_t number, char endianness, FILE *stream, unsigned char* checksum){
-	if(endianness==BIG_ENDIAN){ //endianness is the order in which the bytes are written.
-		xcpputc((number>>(3*8))&0xff, stream, checksum);
-		xcpputc((number>>(2*8))&0xff, stream, checksum);
-		xcpputc((number>>(1*8))&0xff, stream, checksum);
-		xcpputc((number>>(0*8))&0xff, stream, checksum);
-	} else { //(endian==LITTLE_ENDIAN
-		xcpputc((number>>(0*8))&0xff, stream, checksum);
-		xcpputc((number>>(1*8))&0xff, stream, checksum);
-		xcpputc((number>>(2*8))&0xff, stream, checksum);
-		xcpputc((number>>(3*8))&0xff, stream, checksum);
-	}
-}
+        info_log("🛈 Step 8: folname2\n")
+        buf = bytearray(16)
+        for idx in range(16):
+            buf[idx] = ord(folname[idx]) if idx < (folname_len - 1) else 0xff
+        xcpwrite(bytes(buf), out_stream)
 
+        info_log("🛈 Step 9: varname2\n")
+        buf = bytearray(16)
+        for idx in range(16):
+            buf[idx] = ord(varname[idx]) if idx < (varname_len - 1) else 0xff
+        xcpwrite(bytes(buf), out_stream)
+
+        info_log("🛈 Step 10: skip len1 (for now)\n")
+        addr_len1 = out_stream.tell()
+        out_stream.write(b'\x00\x00\x00\x00')
+
+        info_log("🛈 Step 11: block_guq\n")
+        guq_buf = b'GUQ' + b'\xff' * 10
+        xcpwrite(guq_buf, out_stream)
+
+        info_log("🛈 Step 12: skip len1asc (for now)\n")
+        addr_len1asc = out_stream.tell()
+        out_stream.write(b'\x00' * 8)
+
+        info_log("🛈 Step 13: skip len2 (for now)\n")
+        addr_len2 = out_stream.tell()
+        out_stream.write(b'\x00' * len2_length)
+
+        info_log("🛈 Step 14: block_zero\n")
+        xcpwrite(b'\x00' * block_zero_length, out_stream)
+
+        info_log("🛈 Step 15: copy the data\n")
+        data_length = 0
+        while True:
+            ch_b = in_file.read(1)
+            if not ch_b:
+                break
+            ch = ch_b[0]
+
+            if chgnew:
+                if ch in (0xEC, 0xED, 0xEE):
+                    xcpputc(ch, out_stream)
+                    data_length += 1
+
+                    next_ch_b = in_file.read(1)
+                    if not next_ch_b:
+                        break
+                    xcpputc(next_ch_b[0], out_stream)
+                    data_length += 1
+                    continue
+
+                if ch == ord('\r'):
+                    xcpputc(ord('\r'), out_stream)
+                    data_length += 1
+                    next_ch_b = in_file.read(1)
+                    if not next_ch_b:
+                        break
+                    if next_ch_b[0] == ord('\n'):
+                        continue
+                    ch = next_ch_b[0]
+
+                if ch == ord('\n'):
+                    ch = ord('\r')
+
+            xcpputc(ch, out_stream)
+            data_length += 1
+
+        info_log(f"🛈 Length of the content: {data_length}\n🛈 Length of input file: {in_file.tell()}\n")
+
+        info_log("🛈 Step 16: eof\n")
+        xcpwrite(b'\x00\xff', out_stream)
+
+        info_log("🛈 Step 17: padding ")
+        padding_length = (0 - (len2_length + block_zero_length + data_length + eof_length)) & 0x03
+        pad_buf = bytes([padchar] * padding_length)
+        xcpwrite(pad_buf, out_stream)
+        info_log(f"(padding with {padding_length} bytes)\n")
+
+        info_log("🛈 Now step 10: len1 ")
+        out_stream.seek(addr_len1)
+        len1 = len2_length + block_zero_length + data_length + eof_length + padding_length
+        xcpwriteBinLong(len1, BIG_ENDIAN, out_stream)
+        info_log(f"len1 is {len1}\n")
+
+        info_log("🛈 Now step 12: len1asc\n")
+        out_stream.seek(addr_len1asc)
+        xcpwriteHexLong(len1, out_stream)
+
+        info_log("🛈 Now step 13: len2\n")
+        out_stream.seek(addr_len2)
+        len2_val = data_length + 3
+        xcpwriteBinLong(len2_val, LITTLE_ENDIAN, out_stream)
+
+        info_log("🛈 Step 18: checksum\n")
+        out_stream.seek(0, os.SEEK_END)
+        xcpwriteHexByte(checksum, out_stream)
+
+        info_log("🛈 Closing the files...\n")
+        in_file.close()  # Handled safely at the exact lifecycle stage as C's fclose(in)
+        try:
+            with open(outfile, "wb") as f_out:
+                f_out.write(out_stream.getvalue())
+        except Exception:
+            sys.stderr.write(f"🗶 Cannot open file \"{outfile}\" for writing!\n")
+            sys.exit(-1)
+
+        print("✔ File converted successfully.")
+
+    return 0
+
+if __name__ == '__main__':
+    main()
